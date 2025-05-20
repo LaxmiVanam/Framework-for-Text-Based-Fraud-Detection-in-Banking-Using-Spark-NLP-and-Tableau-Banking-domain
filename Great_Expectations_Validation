@@ -1,0 +1,22 @@
+import great_expectations as ge
+
+# Load NLP outputs
+df = ge.read_parquet("s3://bank-data/nlp_outputs/")
+
+# Validate data
+df.expect_column_values_to_not_be_null("entities")
+df.expect_column_values_to_be_in_set("sentiment", ["positive", "negative", "neutral"])
+df.expect_column_list_length_to_be_between("entities", min_value=0, max_value=50)
+
+# Save validation rules
+df.save_expectation_suite("s3://bank-data/expectations.json")
+
+# Load to Redshift if valid
+if df.validate().success:
+    df.write \
+        .mode("append") \
+        .format("com.databricks.spark.redshift") \
+        .option("url", "jdbc:redshift://<redshift-cluster>") \
+        .option("dbtable", "fraud_indicators") \
+        .option("tempdir", "s3://bank-data/temp/") \
+        .save()
